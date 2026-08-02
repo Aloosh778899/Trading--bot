@@ -1,0 +1,98 @@
+name: Auto Generate and Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Auto Create App Files
+      run: |
+        # 1. Create main.py
+        cat << 'EOF' > main.py
+        from kivy.app import App
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        from kivy.uix.textinput import TextInput
+
+        class TradingBotApp(App):
+            def build(self):
+                layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
+                self.title_label = Label(text='Pocket Broker Trading Bot', font_size=22, size_hint_y=None, height=50)
+                layout.add_widget(self.title_label)
+                self.status_label = Label(text='الحالة: متوقف عن العمل', font_size=16, size_hint_y=None, height=40)
+                layout.add_widget(self.status_label)
+                self.pair_input = TextInput(text='EUR/CHF', multiline=False, size_hint_y=None, height=45)
+                layout.add_widget(self.pair_input)
+                self.start_btn = Button(text='تشغيل البوت', background_color=(0, 0.7, 0, 1), size_hint_y=None, height=55)
+                self.start_btn.bind(on_press=self.start_bot)
+                layout.add_widget(self.start_btn)
+                self.stop_btn = Button(text='إيقاف البوت', background_color=(0.8, 0, 0, 1), size_hint_y=None, height=55)
+                self.stop_btn.bind(on_press=self.stop_bot)
+                layout.add_widget(self.stop_btn)
+                return layout
+
+            def start_bot(self, instance):
+                pair = self.pair_input.text
+                self.status_label.text = f'الحالة: جاري مراقبة زوج {pair}...'
+
+            def stop_bot(self, instance):
+                self.status_label.text = 'الحالة: تم إيقاف البوت.'
+
+        if __name__ == '__main__':
+            TradingBotApp().run()
+        EOF
+
+        # 2. Create buildozer.spec
+        cat << 'EOF' > buildozer.spec
+        [app]
+        title = Trading Bot
+        package.name = tradingbot
+        package.domain = org.trading
+        source.include_exts = py,png,jpg,kv,atlas
+        source.dir = .
+        version = 1.0
+        requirements = python3,kivy
+        orientation = portrait
+        fullscreen = 0
+        android.permissions = INTERNET
+        android.api = 33
+        android.minapi = 21
+        android.ndk = 25b
+        android.accept_sdk_license = True
+
+        [buildozer]
+        log_level = 2
+        warn_on_root = 1
+        EOF
+
+    - name: Install Buildozer Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+
+    - name: Install Buildozer and Cython
+      run: |
+        pip install --upgrade pip
+        pip install --upgrade cython==0.29.36 buildozer
+
+    - name: Build APK
+      run: |
+        buildozer -v android debug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: apk-file
+        path: bin/*.apk
